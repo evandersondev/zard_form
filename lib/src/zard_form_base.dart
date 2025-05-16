@@ -17,6 +17,13 @@ class ZForm<T> extends ChangeNotifier {
   final Map<String, TextEditingController> controllers = {};
   final Map<String, String?> _errors = {};
   final Map<String, dynamic> _values = {};
+  bool _isSubmitting = false;
+  final _validationCacheTimeout = Duration(milliseconds: 500);
+
+  T? _lastValidData;
+  DateTime? _lastValidationTime;
+  bool _mounted = true;
+  bool get isSubmitting => _isSubmitting;
 
   ZForm({
     required this.resolver,
@@ -68,26 +75,60 @@ class ZForm<T> extends ChangeNotifier {
   }
 
   Future<void> handleSubmit(SubmitHandler<T> onValid) async {
-    final result = await resolver(_values);
-    _errors.clear();
-    if (result.success && result.data != null) {
-      notifyListeners();
+    if (_isSubmitting) return;
 
-      onValid(result.data as T);
-    } else {
-      final errors = result.error?.issues ?? [];
+    _isSubmitting = true;
+    notifyListenersIfMounted();
 
-      for (var error in errors) {
+    try {
+      if (_lastValidData != null &&
+          _lastValidationTime != null &&
+          DateTime.now().difference(_lastValidationTime!) <
+              _validationCacheTimeout) {
+        await onValid(_lastValidData as T);
+        return;
+      }
+
+      final result = await resolver(_values);
+      _errors.clear();
+
+      if (result.success && result.data != null) {
+        _lastValidData = result.data as T;
+        _lastValidationTime = DateTime.now();
+        onValid(_lastValidData as T);
+      } else {
+        final errors = result.error?.issues ?? [];
+        for (var error in errors) {
+          _errors.addAll({'${error.path}': error.message});
+        }
+      }
+    } on ZardError catch (e) {
+      for (var error in e.issues) {
         _errors.addAll({'${error.path}': error.message});
       }
-      notifyListeners();
+    } catch (e) {
+      _errors.addAll({'form': 'An error ccurred: $e'});
+    } finally {
+      _isSubmitting = false;
+      notifyListenersIfMounted();
     }
   }
 
   @override
   void dispose() {
+    _mounted = false;
     for (var c in controllers.values) {
       c.dispose();
+    }
+    _errors.clear();
+    _values.clear();
+    controllers.clear();
+    super.dispose();
+  }
+
+  void notifyListenersIfMounted() {
+    if (_mounted) {
+      notifyListeners();
     }
   }
 }

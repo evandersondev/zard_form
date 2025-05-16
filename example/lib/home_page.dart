@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:zard_form/zard_form.dart';
 
@@ -23,26 +22,29 @@ class _HomePageState extends State<HomePage> {
     },
   );
 
-  void handleFormSubmit(data) async {
-    await showAdaptiveDialog(
-        context: context,
-        builder: (context) {
-          return CupertinoAlertDialog(
-            title: const Text('Success'),
-            content: Column(
-              children: [
-                Text('Email: ${data['email']}'),
-                Text('Password: ${data['password']}'),
-              ],
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        });
+  Future<void> handleFormSubmit(data) async {
+    Future.delayed(Duration(seconds: 3), () async {
+      print(data);
+      // await showAdaptiveDialog(
+      //     context: context,
+      //     builder: (context) {
+      //       return CupertinoAlertDialog(
+      //         title: const Text('Success'),
+      //         content: Column(
+      //           children: [
+      //             Text('Email: ${data['email']}'),
+      //             Text('Password: ${data['password']}'),
+      //           ],
+      //         ),
+      //         actions: [
+      //           CupertinoDialogAction(
+      //             onPressed: () => Navigator.pop(context),
+      //             child: const Text('OK'),
+      //           ),
+      //         ],
+      //       );
+      //     });
+    });
   }
 
   @override
@@ -50,7 +52,8 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: ZFormBuilder(
         form: form,
-        builder: (context, form) {
+        builder: (context, isSubmitting) {
+          print(form.isSubmitting);
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
@@ -72,17 +75,50 @@ class _HomePageState extends State<HomePage> {
                     errorText: form.error('password'),
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () async {
-                    await form.handleSubmit(handleFormSubmit);
-                  },
-                  child: Text("Enviar"),
+                SubmitButton(
+                  text: 'Enviar',
+                  isLoading: isSubmitting,
+                  onPressed: () => form.handleSubmit(handleFormSubmit),
                 ),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class SubmitButton extends StatelessWidget {
+  final String text;
+  final bool isLoading;
+  final VoidCallback? onPressed;
+
+  const SubmitButton({
+    super.key,
+    required this.text,
+    this.isLoading = false,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+      ),
+      onPressed: isLoading ? null : onPressed,
+      child: isLoading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+          : Text(text),
     );
   }
 }
