@@ -4,7 +4,7 @@ import '../zard_form.dart';
 
 class ZFormBuilder extends StatelessWidget {
   final ZForm form;
-  final Widget Function(BuildContext context, bool isSubmitting) builder;
+  final Widget Function(BuildContext context, ZFormState formState) builder;
 
   const ZFormBuilder({
     super.key,
@@ -18,7 +18,7 @@ class ZFormBuilder extends StatelessWidget {
       listenable: form,
       builder: (context, _) => builder(
         context,
-        form.isSubmitting,
+        form.formState,
       ),
     );
   }

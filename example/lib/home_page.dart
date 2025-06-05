@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:zard_form/zard_form.dart';
+import 'package:zard_form/zard_form.dart'; // ajuste conforme seu package
 
 final schema = z.map({
   'email': z.string().email(),
@@ -16,35 +16,19 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final form = useForm(
     resolver: zardResolver(schema),
+    mode: ValidationMode.onChange,
     defaultValues: {
-      'email': 'example@mail.com',
-      'password': '123456',
+      'email': '',
+      'password': '',
     },
   );
 
-  Future<void> handleFormSubmit(data) async {
-    Future.delayed(Duration(seconds: 3), () async {
+  Future<void> onSubmit(data) async {
+    try {
       print(data);
-      // await showAdaptiveDialog(
-      //     context: context,
-      //     builder: (context) {
-      //       return CupertinoAlertDialog(
-      //         title: const Text('Success'),
-      //         content: Column(
-      //           children: [
-      //             Text('Email: ${data['email']}'),
-      //             Text('Password: ${data['password']}'),
-      //           ],
-      //         ),
-      //         actions: [
-      //           CupertinoDialogAction(
-      //             onPressed: () => Navigator.pop(context),
-      //             child: const Text('OK'),
-      //           ),
-      //         ],
-      //       );
-      //     });
-    });
+    } catch (error) {
+      form.setError('form', 'Falha ao fazer login');
+    }
   }
 
   @override
@@ -52,14 +36,11 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: ZFormBuilder(
         form: form,
-        builder: (context, isSubmitting) {
-          print(form.isSubmitting);
+        builder: (context, formState) {
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: const EdgeInsets.all(30.0),
             child: Column(
               spacing: 16,
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 TextField(
                   controller: form.register('email'),
@@ -76,9 +57,9 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 SubmitButton(
-                  text: 'Enviar',
-                  isLoading: isSubmitting,
-                  onPressed: () => form.handleSubmit(handleFormSubmit),
+                  text: 'Login',
+                  isLoading: formState.isSubmitting,
+                  onPressed: () => form.handleSubmit(onSubmit),
                 ),
               ],
             ),

@@ -1,75 +1,174 @@
 import 'package:flutter/material.dart';
+import 'package:zard/zard.dart';
 
-import '../zard_form.dart';
+import 'types.dart';
+
+Resolver<T> zardResolver<T>(ZMap schema) {
+  return (Map<String, dynamic> values) async {
+    final result = await schema.safeParseAsync(values);
+    return ZardResult<T>(
+      success: result.success,
+      data: result.data,
+      error: result.error,
+    );
+  };
+}
 
 ZForm<T> useForm<T>({
-  required Resolver<T> resolver,
+  Resolver<T>? resolver,
+  ValidationMode mode = ValidationMode.onSubmit,
   Map<String, dynamic>? defaultValues,
+  Duration? validationDelay,
+  bool shouldUnregister = true,
+  bool delayError = true,
 }) {
   return ZForm<T>(
-    resolver: resolver,
-    defaultValues: defaultValues,
+    props: UseFormProps(
+      resolver: resolver,
+      mode: mode,
+      defaultValues: defaultValues,
+      validationDelay: validationDelay,
+      shouldUnregister: shouldUnregister,
+      delayError: delayError,
+    ),
   );
 }
 
 class ZForm<T> extends ChangeNotifier {
-  final Resolver<T> resolver;
-  final Map<String, TextEditingController> controllers = {};
+  final UseFormProps<T> _props;
+  final Map<String, TextEditingController> _controllers = {};
   final Map<String, String?> _errors = {};
   final Map<String, dynamic> _values = {};
-  bool _isSubmitting = false;
-  final _validationCacheTimeout = Duration(milliseconds: 500);
+  final Map<String, bool> _dirtyFields = {};
+  final Map<String, bool> _touchedFields = {};
 
+  bool _isSubmitting = false;
+  bool _isValidating = false;
+  final bool _isValid = true;
+  bool _isDirty = false;
+  bool _mounted = true;
   T? _lastValidData;
   DateTime? _lastValidationTime;
-  bool _mounted = true;
-  bool get isSubmitting => _isSubmitting;
+
+  final Duration _validationCacheTimeout;
 
   ZForm({
-    required this.resolver,
-    Map<String, dynamic>? defaultValues,
-  }) {
-    defaultValues?.forEach((key, value) {
+    required UseFormProps<T> props,
+  })  : _props = props,
+        _validationCacheTimeout =
+            props.validationDelay ?? const Duration(milliseconds: 500) {
+    _initializeForm();
+  }
+
+  void _initializeForm() {
+    _props.defaultValues?.forEach((key, value) {
       _values[key] = value;
+      final controller = TextEditingController(text: value?.toString() ?? '');
+      _setupController(key, controller);
+      _controllers[key] = controller;
     });
-    for (var key in defaultValues?.keys ?? []) {
-      final controller =
-          TextEditingController(text: defaultValues![key]?.toString() ?? '');
-      controller.addListener(() {
-        _values['$key'] = controller.text;
-      });
-      controllers['$key'] = controller;
+  }
+
+  void _setupController(String name, TextEditingController controller) {
+    controller.addListener(() {
+      _values[name] = controller.text;
+      _dirtyFields[name] = true;
+      _isDirty = true;
+
+      if (_props.mode == ValidationMode.onChange) {
+        _validateField(name);
+      }
+
+      notifyListenersIfMounted();
+    });
+  }
+
+  TextEditingController register(String name, [FieldProps? options]) {
+    if (!_controllers.containsKey(name)) {
+      final controller = TextEditingController(
+        text: _props.defaultValues?[name]?.toString() ?? '',
+      );
+      _setupController(name, controller);
+      _controllers[name] = controller;
+    }
+    return _controllers[name]!;
+  }
+
+  Future<void> _validateField(String name) async {
+    if (_props.resolver == null) return;
+
+    _isValidating = true;
+    notifyListenersIfMounted();
+
+    try {
+      final result = await _props.resolver!(_values);
+      if (!result.success) {
+        // Verifica se existe algum erro associado ao campo 'name'
+        if (result.error?.issues
+                .any((issue) => issue.path.toString() == name) ??
+            false) {
+          final fieldError = result.error!.issues.firstWhere(
+            (issue) => issue.path.toString() == name,
+          );
+          _errors[name] = fieldError.message;
+        } else {
+          // Se não houver erro, remove o erro do campo
+          _errors.remove(name);
+        }
+      } else {
+        // Se a validação retornar sucesso, remove o erro do campo
+        _errors.remove(name);
+      }
+    } finally {
+      _isValidating = false;
+      notifyListenersIfMounted();
     }
   }
 
-  TextEditingController register(String name) {
-    controllers.putIfAbsent(name, () {
-      final controller = TextEditingController();
-      controller.addListener(() {
-        _values[name] = controller.text;
-      });
-      return controller;
-    });
-    return controllers[name]!;
-  }
+  ZFormState get formState => ZFormState(
+        isValid: _isValid,
+        isSubmitting: _isSubmitting,
+        isDirty: _isDirty,
+        isValidating: _isValidating,
+        errors: _errors,
+        dirtyFields: _dirtyFields,
+        touchedFields: _touchedFields,
+      );
 
+  bool get isSubmitting => _isSubmitting;
   String? error(String name) => _errors[name];
-
   dynamic getValue(String name) => _values[name];
+  Map<String, dynamic> get values => _values;
+
   void setValue(String name, dynamic value) {
-    controllers[name]?.text = value.toString();
+    _controllers[name]?.text = value.toString();
     _values[name] = value;
+    _dirtyFields[name] = true;
+    _isDirty = true;
+    notifyListenersIfMounted();
   }
 
-  Map<String, dynamic> get values => _values;
+  void setError(String name, String message) {
+    _errors[name] = message;
+    notifyListenersIfMounted();
+  }
+
+  void clearErrors([String? name]) {
+    if (name != null) {
+      _errors.remove(name);
+    } else {
+      _errors.clear();
+    }
+    notifyListenersIfMounted();
+  }
 
   void reset([Map<String, dynamic>? initialValues]) {
     initialValues?.forEach((key, value) {
       setValue(key, value);
     });
     if (initialValues == null) {
-      for (var key in controllers.keys) {
-        controllers[key]?.clear();
+      for (var key in _controllers.keys) {
+        _controllers[key]?.clear();
       }
     }
   }
@@ -89,13 +188,13 @@ class ZForm<T> extends ChangeNotifier {
         return;
       }
 
-      final result = await resolver(_values);
+      final result = await _props.resolver!(_values);
       _errors.clear();
 
       if (result.success && result.data != null) {
         _lastValidData = result.data as T;
         _lastValidationTime = DateTime.now();
-        onValid(_lastValidData as T);
+        await onValid(_lastValidData as T);
       } else {
         final errors = result.error?.issues ?? [];
         for (var error in errors) {
@@ -107,7 +206,7 @@ class ZForm<T> extends ChangeNotifier {
         _errors.addAll({'${error.path}': error.message});
       }
     } catch (e) {
-      _errors.addAll({'form': 'An error ccurred: $e'});
+      _errors.addAll({'form': 'An error occurred: $e'});
     } finally {
       _isSubmitting = false;
       notifyListenersIfMounted();
@@ -117,12 +216,12 @@ class ZForm<T> extends ChangeNotifier {
   @override
   void dispose() {
     _mounted = false;
-    for (var c in controllers.values) {
-      c.dispose();
+    for (var controller in _controllers.values) {
+      controller.dispose();
     }
     _errors.clear();
     _values.clear();
-    controllers.clear();
+    _controllers.clear();
     super.dispose();
   }
 
@@ -132,11 +231,3 @@ class ZForm<T> extends ChangeNotifier {
     }
   }
 }
-
-// class ZardResult<T> {
-//   final bool success;
-//   final T? data;
-//   final List<ZardError>? errors;
-
-//   ZardResult({required this.success, this.data, this.errors});
-// }
