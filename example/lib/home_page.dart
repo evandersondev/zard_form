@@ -16,7 +16,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final form = useForm(
     resolver: zardResolver(schema),
-    mode: ValidationMode.onChange,
+    mode: ValidationMode.onSubmit,
     defaultValues: {
       'email': '',
       'password': '',
@@ -24,11 +24,8 @@ class _HomePageState extends State<HomePage> {
   );
 
   Future<void> onSubmit(data) async {
-    try {
-      print(data);
-    } catch (error) {
-      form.setError('form', 'Falha ao fazer login');
-    }
+    await Future.delayed(Duration(seconds: 2));
+    print('Form submitted: $data');
   }
 
   @override
@@ -36,7 +33,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: ZFormBuilder(
         form: form,
-        builder: (context, formState) {
+        builder: (context, state) {
           return Padding(
             padding: const EdgeInsets.all(30.0),
             child: Column(
@@ -46,19 +43,19 @@ class _HomePageState extends State<HomePage> {
                   controller: form.register('email'),
                   decoration: InputDecoration(
                     labelText: 'Email',
-                    errorText: form.error('email'),
+                    errorText: state.errors['email'],
                   ),
                 ),
                 TextField(
                   controller: form.register('password'),
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    errorText: form.error('password'),
+                    errorText: state.errors['password'],
                   ),
                 ),
                 SubmitButton(
                   text: 'Login',
-                  isLoading: formState.isSubmitting,
+                  isLoading: state.isSubmitting,
                   onPressed: () => form.handleSubmit(onSubmit),
                 ),
               ],

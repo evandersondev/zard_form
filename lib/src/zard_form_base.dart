@@ -180,6 +180,10 @@ class ZForm<T> extends ChangeNotifier {
     notifyListenersIfMounted();
 
     try {
+      if (_props.resolver == null) {
+        throw Exception('No resolver provided');
+      }
+
       if (_lastValidData != null &&
           _lastValidationTime != null &&
           DateTime.now().difference(_lastValidationTime!) <
